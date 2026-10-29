@@ -1,0 +1,19 @@
+seed: 3000000
+device: auto
+dtype: float32
+data:
+  kind: div2k
+  root: data/div2k_processed
+  test_manifest: manifests/test.csv
+  rank: 3
+  max_test_samples: 1600
+  comparison_count: 18
+  noise:
+    type: impulse
+    value: salt_pepper
+    rates: [0.01, 0.05, 0.10]
+    sigmas: [0.0]
+evaluation:
+  support_threshold: 0.02
+  success_psnr: 30.0
+  success_ssim: 0.90

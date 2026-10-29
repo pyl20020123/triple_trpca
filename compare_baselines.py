@@ -13,6 +13,7 @@ import torch
 
 from src.io_utils import load_config, resolve_device, resolve_dtype
 from src.metrics import batch_metrics
+from src.image_dataset import DIV2KPatchDataset
 from src.numpy_core import fit_trpca
 from src.synthetic_dataset import SyntheticTRPCADataset, split_seeds
 from src.unfold_net import TriTDHalfUnfold
@@ -49,10 +50,17 @@ def main() -> None:
                             alpha=model_cfg.get("alpha", 1e-4), learnable=False).to(device=device, dtype=dtype)
     fixed.eval()
     data = config["data"]
-    count = int(data.get("comparison_count", data["test_count"]))
-    seeds = split_seeds(0, 0, count)["test"]
-    dataset = SyntheticTRPCADataset(seeds, data["shape"], data["rank"], data["rates"],
-                                    data.get("amplitudes", [3.0]), dtype, learned.init_seed)
+    count = int(data.get("comparison_count", data.get("test_count", 18)))
+    if data.get("kind", "synthetic") == "div2k":
+        root = Path(data["root"])
+        dataset = DIV2KPatchDataset(
+            root / data.get("test_manifest", "manifests/test.csv"), data["rank"],
+            data["noise"], dtype, augment=False, base_seed=int(config.get("seed", 3000000)),
+            max_samples=count, init_seed=learned.init_seed)
+    else:
+        seeds = split_seeds(0, 0, count)["test"]
+        dataset = SyntheticTRPCADataset(seeds, data["shape"], data["rank"], data["rates"],
+                                        data.get("amplitudes", [3.0]), dtype, learned.init_seed)
     threshold = config["evaluation"].get("support_threshold", 0.05)
     rows = []
     for index in range(len(dataset)):
@@ -82,8 +90,9 @@ def main() -> None:
             elapsed = time.perf_counter() - started
             metrics = tensor_metrics(item, torch.from_numpy(result["L"]), torch.from_numpy(result["S"]), threshold)
             rows.append({**meta, "method": name, "seconds": elapsed, "sweeps": sweeps, **metrics})
-    fields = ["case", "rank", "rate", "amplitude", "data_seed", "method", "sweeps", "seconds",
-              "rre_l", "rre_s", "precision", "recall", "f1", "residual_rre"]
+    fields = ["case", "image_id", "rank", "noise_type", "rate", "sigma", "amplitude",
+              "data_seed", "method", "sweeps", "seconds", "rre_l", "rre_s", "precision",
+              "recall", "f1", "residual_rre", "psnr", "ssim"]
     with (output / "comparison_by_case.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()

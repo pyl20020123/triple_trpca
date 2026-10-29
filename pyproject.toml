@@ -12,6 +12,7 @@ dependencies = [
   "torch>=2.1",
   "PyYAML>=6.0",
   "matplotlib>=3.6",
+  "Pillow>=9.5",
 ]
 
 [project.optional-dependencies]
@@ -22,5 +23,6 @@ packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra"
 

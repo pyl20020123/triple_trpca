@@ -1,0 +1,44 @@
+seed: 2026
+device: auto
+dtype: float32
+data:
+  kind: div2k
+  root: data/div2k_processed
+  train_manifest: manifests/train.csv
+  val_manifest: manifests/val.csv
+  test_manifest: manifests/test.csv
+  rank: 3
+  noise:
+    type: impulse
+    value: salt_pepper
+    rate_range: [0.01, 0.10]
+    rates: [0.01, 0.05, 0.10]
+    sigma_range: [0.0, 0.0]
+    sigmas: [0.0]
+model:
+  stages: 5
+  warmup_sweeps: 2
+  lambda_init: 0.002
+  eta_init: 0.001
+  eta_s_init: 0.001
+  alpha: 0.0001
+  positivity_eps: 1.0e-8
+  init_seed: 17
+loss:
+  gamma_s: 0.1
+  gamma_d: 0.0
+  stage_decay: 0.8
+training:
+  batch_size: 8
+  epochs: 100
+  lr: 0.001
+  clip_grad_norm: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  early_stopping_patience: 15
+  amp: false
+evaluation:
+  support_threshold: 0.02
+  success_psnr: 30.0
+  success_ssim: 0.90
+

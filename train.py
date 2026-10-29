@@ -17,12 +17,14 @@ from src.io_utils import (append_csv, environment_info, load_config, resolve_dev
                           resolve_dtype, restore_rng_state, rng_state, save_yaml,
                           seed_everything, write_json)
 from src.synthetic_dataset import SyntheticTRPCADataset, split_seeds
+from src.image_dataset import DIV2KPatchDataset
 from src.trainer import evaluate_loader, train_one_epoch
 from src.unfold_net import TriTDHalfUnfold
 
 
 LOG_FIELDS = ["epoch", "lr", "loss_total", "loss_rec", "loss_sparse", "rre_l_mean",
-              "rre_s_mean", "f1_mean", "active_ratio_mean", "grad_norm", "seconds"]
+              "rre_s_mean", "f1_mean", "psnr_mean", "ssim_mean", "active_ratio_mean",
+              "grad_norm", "seconds"]
 
 
 def build_model(config: dict) -> TriTDHalfUnfold:
@@ -38,6 +40,20 @@ def build_model(config: dict) -> TriTDHalfUnfold:
 
 def make_datasets(config: dict, dtype: torch.dtype, output: Path):
     data = config["data"]
+    if data.get("kind", "synthetic") == "div2k":
+        root = Path(data["root"])
+        common = dict(rank=data["rank"], noise=data["noise"], dtype=dtype,
+                      base_seed=int(config.get("seed", 2026)),
+                      init_seed=config["model"].get("init_seed", 17))
+        train_set = DIV2KPatchDataset(
+            root / data.get("train_manifest", "manifests/train.csv"), augment=True,
+            max_samples=data.get("max_train_samples"), **common)
+        val_set = DIV2KPatchDataset(
+            root / data.get("val_manifest", "manifests/val.csv"), augment=False,
+            max_samples=data.get("max_val_samples"), **common)
+        train_set.write_manifest(output / "data_manifest_train.csv")
+        val_set.write_manifest(output / "data_manifest_val.csv")
+        return train_set, val_set
     seeds = split_seeds(data["train_count"], data["val_count"], data.get("test_count", 0))
     common = dict(shape=data["shape"], rank=data["rank"], rates=data["rates"],
                   amplitudes=data.get("amplitudes", [3.0]), dtype=dtype,
@@ -119,6 +135,8 @@ def main() -> None:
     stale = 0
     epochs = int(config["training"]["epochs"])
     for epoch in range(start_epoch, epochs + 1):
+        if hasattr(train_set, "set_epoch"):
+            train_set.set_epoch(epoch)
         train_metrics = train_one_epoch(train_loader, optimizer, model, config, device, dtype)
         val_metrics = evaluate_loader(val_loader, model, config, device, dtype)
         lr = optimizer.param_groups[0]["lr"]

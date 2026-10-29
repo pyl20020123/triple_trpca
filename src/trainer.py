@@ -18,7 +18,8 @@ def train_one_epoch(loader, optimizer, model, config: dict,
                     device: torch.device, dtype: torch.dtype) -> dict[str, float]:
     model.train()
     totals = {key: 0.0 for key in ("loss_total", "loss_rec", "loss_sparse", "rre_l_mean",
-                                    "rre_s_mean", "f1_mean", "active_ratio_mean")}
+                                    "rre_s_mean", "f1_mean", "psnr_mean", "ssim_mean",
+                                    "active_ratio_mean")}
     samples = 0
     active_by_stage = None
     last_grad_norm = 0.0
@@ -47,7 +48,7 @@ def train_one_epoch(loader, optimizer, model, config: dict,
         totals["loss_total"] += float(losses["total"].detach()) * count
         totals["loss_rec"] += float(losses["rec"].detach()) * count
         totals["loss_sparse"] += float(losses["sparse"].detach()) * count
-        for key in ("rre_l", "rre_s", "f1"):
+        for key in ("rre_l", "rre_s", "f1", "psnr", "ssim"):
             totals[f"{key}_mean"] += float(metrics[key].sum())
         totals["active_ratio_mean"] += float(output["active_ratios"].mean().detach()) * count
         stage_values = output["active_ratios"].detach().cpu() * count
@@ -63,7 +64,8 @@ def evaluate_loader(loader, model, config: dict, device: torch.device,
                     dtype: torch.dtype) -> dict[str, float]:
     model.eval()
     totals = {key: 0.0 for key in ("loss_total", "loss_rec", "loss_sparse", "rre_l_mean",
-                                    "rre_s_mean", "f1_mean", "active_ratio_mean")}
+                                    "rre_s_mean", "f1_mean", "psnr_mean", "ssim_mean",
+                                    "active_ratio_mean")}
     samples = 0
     active_by_stage = None
     started = time.perf_counter()
@@ -82,7 +84,7 @@ def evaluate_loader(loader, model, config: dict, device: torch.device,
         totals["loss_total"] += float(losses["total"]) * count
         totals["loss_rec"] += float(losses["rec"]) * count
         totals["loss_sparse"] += float(losses["sparse"]) * count
-        for key in ("rre_l", "rre_s", "f1"):
+        for key in ("rre_l", "rre_s", "f1", "psnr", "ssim"):
             totals[f"{key}_mean"] += float(metrics[key].sum())
         totals["active_ratio_mean"] += float(output["active_ratios"].mean()) * count
         stage_values = output["active_ratios"].detach().cpu() * count

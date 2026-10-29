@@ -1,12 +1,17 @@
-# TriTD–Half TRPCA 深度展开 V2
+# TriTD–Half 彩色图像去噪（DIV2K）
 
-这是规格 V2.0 的完整、可复现实验工程。网络把 `K` 次可解释更新展开为
+这是从 TriTD–Half TRPCA V2 扩展出的 RGB 图像去噪工程。网络把 `K` 次可解释更新展开为
 `Half → ProxMALS(A → B → C)`，输入只有受污染张量 `Y`，输出低 triple 秩估计 `L`
 和稀疏异常估计 `S`。每层学习非负的 `lambda`、`eta` 和 `eta_s`；Half 映射在活动分支
 反向传播，在不连续阈值处选择零解。
 
-本项目研究“已知低 triple 秩上界 + 人为随机稀疏污染”的受控问题，不是通用真实高光谱
-混合噪声去除器，也不声称展开网络一定优于固定数值算法。
+RGB 图像按 `(height,width,3)` 作为三阶张量。默认任务是彩色盐椒/脉冲噪声，因为 Half
+正则对应稀疏异常；配置也能生成高斯或混合噪声，但高斯噪声是稠密的，不再严格符合原始
+稀疏模型假设。自然图像也只近似满足低 triple 秩，因此必须用实际 DIV2K 测试 PSNR/SSIM，
+不能从合成张量实验直接推断效果。
+
+RGB 已归一化到 `[0,1]`，所以默认 `lambda_init=0.002`，明显小于合成张量的 0.1；训练时
+应关注 `active_ratio`。如果所有 Stage 长期接近零，Half 活动分支及 λ 会几乎收不到梯度。
 
 ## 安装与测试
 
@@ -20,7 +25,71 @@ pytest -q
 测试覆盖 NumPy/Torch 收缩与 MALS 对齐、Half 阈值和数值梯度、Stage 顺序、末层 λ 梯度、
 批处理和可变尺寸、数据划分防泄漏、训练冒烟与 checkpoint 重载。CUDA 测试在无 GPU 时跳过。
 
-## 快速运行
+## 准备 DIV2K
+
+脚本可下载官方 HR 压缩包，并把官方 validation 图像按源图像划分成互斥的 val/test，之后
+生成无损 RGB patch 和 manifest。默认每张源图最多保留 32 个 `64×64` patch，避免一次生成
+过大的数据目录。
+
+```bash
+python prepare_div2k.py \
+  --source data/div2k_raw \
+  --out data/div2k_processed \
+  --download \
+  --patch-size 64 \
+  --stride 64 \
+  --max-patches-per-image 32 \
+  --val-images 50
+```
+
+如果已经下载数据，去掉 `--download`，并确保源目录包含 `DIV2K_train_HR/` 和
+`DIV2K_valid_HR/`。预处理输出包含 `patches/{train,val,test}` 和对应的三个 manifest；同一
+源图绝不会同时进入 val 与 test。
+
+## DIV2K 训练与评估
+
+先用小样本配置检查环境和数据：
+
+```bash
+python train.py --config configs/div2k_smoke.yaml --out outputs/div2k_smoke
+python evaluate.py --config configs/eval_div2k.yaml \
+  --checkpoint outputs/div2k_smoke/checkpoints/best.pt \
+  --out outputs/div2k_smoke_test
+```
+
+正式训练：
+
+```bash
+python train.py --config configs/train_div2k.yaml --out outputs/train_div2k
+python evaluate.py --config configs/eval_div2k.yaml \
+  --checkpoint outputs/train_div2k/checkpoints/best.pt \
+  --out outputs/test_div2k
+```
+
+评价结果包含 RRE、污染支撑 Precision/Recall/F1、PSNR、SSIM、逐 Stage 指标、彩色恢复面板、
+输入 PSNR/SSIM、PSNR 增益、推理耗时和失败样本。测试集不参与学习率、Stage 数或阈值选择。
+
+如果目标是常见 AWGN，可使用 `configs/train_div2k_gaussian.yaml` 与
+`configs/eval_div2k_gaussian.yaml`，内置 σ=15/25/50（配置中除以 255）。由于高斯噪声是稠密
+噪声，Precision/Recall/F1 不具有稀疏支撑解释，主要看 PSNR、SSIM 与 `psnr_gain`；该实验
+不能宣称仍是原 Half 稀疏近端模型的严格对应。
+
+## 对单张彩色图片去噪
+
+整图推理使用重叠 patch 并平均融合，避免把完整 2K 图像的计算图一次放入显存：
+
+```bash
+python denoise_image.py \
+  --input noisy.png \
+  --checkpoint outputs/train_div2k/checkpoints/best.pt \
+  --output outputs/denoised.png \
+  --tile-size 64 \
+  --overlap 16
+```
+
+同时生成 `denoised_noise.npy`（原始残差数值）和 `denoised_noise.png`（加 0.5 后的可视化）。
+
+## 合成张量兼容流程
 
 先运行 12/4/4 样本的小规模流程：
 
@@ -34,7 +103,7 @@ python compare_baselines.py --config configs/smoke.yaml \
   --out outputs/smoke_comparison
 ```
 
-正式配置：
+原 V2 合成张量正式配置：
 
 ```bash
 python train.py --config configs/train_v2.yaml --out outputs/train_v2
@@ -76,4 +145,7 @@ Half→MALS（B2）和训练后的展开网络（B4）。sweep 数会落盘；Nu
 - `src/half_torch.py`：精确 Half 前向和活动分支梯度
 - `src/stage.py` / `src/unfold_net.py`：单 Stage 与 K 层网络
 - `src/synthetic_dataset.py`：确定性合成数据和 split manifest
+- `prepare_div2k.py`：DIV2K 下载、安全解压、RGB 切块和互斥 manifest
+- `src/image_dataset.py`：RGB patch、增强和脉冲/高斯/混合噪声
+- `denoise_image.py`：任意尺寸 RGB 图片的重叠分块去噪
 - `train.py` / `evaluate.py` / `compare_baselines.py`：训练、冻结测试和公平对照
