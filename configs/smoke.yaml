@@ -1,0 +1,37 @@
+seed: 2026
+device: auto
+dtype: float64
+data:
+  shape: [8, 8, 6]
+  rank: 2
+  rates: [0.05]
+  amplitudes: [3.0]
+  train_count: 12
+  val_count: 4
+  test_count: 4
+  comparison_count: 2
+model:
+  stages: 2
+  warmup_sweeps: 1
+  lambda_init: 0.1
+  eta_init: 0.001
+  eta_s_init: 0.001
+  alpha: 0.0001
+  positivity_eps: 1.0e-8
+  init_seed: 17
+loss:
+  gamma_s: 0.1
+  gamma_d: 0.0
+  stage_decay: 0.8
+training:
+  batch_size: 4
+  epochs: 3
+  lr: 0.001
+  clip_grad_norm: 1.0
+  lr_factor: 0.5
+  lr_patience: 2
+  early_stopping_patience: 3
+  amp: false
+evaluation:
+  support_threshold: 0.05
+

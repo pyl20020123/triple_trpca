@@ -1,0 +1,12 @@
+device: auto
+dtype: float32
+data:
+  shape: [20, 20, 16]
+  rank: 2
+  rates: [0.01, 0.05, 0.10]
+  amplitudes: [3.0]
+  test_count: 240
+  comparison_count: 18
+evaluation:
+  support_threshold: 0.05
+
